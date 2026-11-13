@@ -1,5 +1,5 @@
 /**
- * SNS のカード（OGP）画像の案。ゲームの紹介用で、結果ごとには変わらない（public/og.png に1枚置く）
+ * SNS のカード（OGP）画像の案。ゲームの紹介用で、結果ごとには変わらない（public/og.jpg に1枚置く）
  */
 import { BOARDS, shownPct, starCount, starsOf, votes } from '../src/core/flag';
 import { Game } from '../src/core/game';
@@ -211,16 +211,16 @@ function render(): void {
     d.draw(g, d.id === 'flag' ? b.empty : d.id === 'flag-zoom' ? b.early : b.mid);
     const fig = document.createElement('figure');
     fig.innerHTML = `<figcaption><b>${d.name}</b><span>${d.note}</span></figcaption>`;
-    // 選んだ案を public/og.png に書き出す（開発用の受け口 scripts/og-save.py が動いているときだけ）
+    // 選んだ案を public/og.jpg に書き出す（開発用の受け口 scripts/og-save.py が動いているときだけ）
     const save = document.createElement('button');
     save.type = 'button';
-    save.textContent = 'public/og.png に保存';
+    save.textContent = 'public/og.jpg に保存';
     save.addEventListener('click', () => c.toBlob(async blob => {
       try {
-        const res = await fetch('http://localhost:5199/og.png', { method: 'POST', body: blob });
+        const res = await fetch('http://localhost:5199/og.jpg', { method: 'POST', body: blob });
         msg.textContent = res.ok ? `${d.name} を保存しました` : `保存できませんでした（${res.status}）`;
       } catch { msg.textContent = '保存の受け口（scripts/og-save.py）が動いていません'; }
-    }, 'image/png'));
+    }, 'image/jpeg', 0.9));
     fig.querySelector('figcaption')!.appendChild(save);
     const img = document.createElement('img');
     img.src = c.toDataURL('image/png');
