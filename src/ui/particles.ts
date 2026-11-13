@@ -1,5 +1,6 @@
 /**
  * 票の粒：星を取ったら盤から得票バーへ、取られたらバーから盤へ、光の粒を飛ばす（一瞬全方位に飛び散ってから向かう）。
+ * 星でない点に打ったときは、石のまわりに少しだけ散って、その場で消える（puff）。
  * 画面全体に重ねた透明な canvas に描く（クリックは素通し）。動きを減らす設定のときは出さない
  */
 
@@ -23,6 +24,8 @@ interface Grain {
   tint: Tint;
   /** 飛ぶにつれて白へ近づける（取られた票が、空いた星に戻るとき） */
   whiten: boolean;
+  /** どこへも飛ばず、散ったその場で dur かけて消える（puff） */
+  fade?: boolean;
 }
 
 /** 最初に全方位へ飛び散る長さ（ms）と距離（px） */
@@ -73,7 +76,7 @@ function scattered(g: Grain, now: number): Pt {
 
 /** 時刻 now の位置（飛び散る → 漂う → 行き先へ曲線で飛ぶ） */
 function posAt(g: Grain, now: number): Pt {
-  if (now < g.tDepart) return scattered(g, now);
+  if (g.fade || now < g.tDepart) return scattered(g, now);
   const from = scattered(g, g.tDepart), to = g.to(), t = ease(Math.min(1, (now - g.tDepart) / g.dur));
   const dx = to.x - from.x, dy = to.y - from.y;
   // 2次ベジェ。制御点は中点から、線に直交する向きへ bend だけずらす
@@ -89,8 +92,8 @@ function frame(now: number): void {
   for (const g of grains) {
     if (now < g.tBurst) continue;
     const c = COLORS[g.tint], k = Math.max(0, (now - g.tDepart) / g.dur), w = g.whiten ? Math.min(1, k * 1.1) : 0;
-    // 現れるときと着く直前は薄く
-    const a = Math.min(1, (now - g.tBurst) / 60, (1 - k) * 5);
+    // 現れるときと着く直前は薄く。その場で消える粒は、だんだん薄く
+    const a = g.fade ? Math.min(1, (now - g.tBurst) / 40) * (1 - k) : Math.min(1, (now - g.tBurst) / 60, (1 - k) * 5);
     const p = posAt(g, now), tail = posAt(g, Math.max(g.tBurst, now - 45));
     // 尾
     ctx.strokeStyle = mix(c.glow, WHITE, w, 0.55 * a);
@@ -139,6 +142,26 @@ export function burst(from: Pt, to: () => Pt, tint: Tint, opts: { count?: number
   }
   if (!raf) raf = requestAnimationFrame(frame);
   return f;
+}
+
+/**
+ * 星でない点に打ったとき：石のふち（cell は盤の目の大きさ px）から少しだけ外へ散り、その場で消える。
+ * 票にはならないので、星のときより少なく・小さく・短く
+ */
+export function puff(at: Pt, tint: Tint, cell: number): void {
+  if (reducedMotion.matches || !(cell > 0)) return;
+  ensureCanvas();
+  const now = performance.now(), n = 7, turn = Math.random() * Math.PI * 2;
+  for (let i = 0; i < n; i++) {
+    const ang = turn + (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.6, cos = Math.cos(ang), sin = Math.sin(ang);
+    const r0 = cell * 0.42, dist = cell * (0.22 + Math.random() * 0.28);
+    grains.push({
+      origin: { x: at.x + cos * r0, y: at.y + sin * r0 }, spread: { x: cos * dist, y: sin * dist }, to: () => at, tint,
+      bend: 0, tBurst: now, tDepart: now, dur: 380 + Math.random() * 200,
+      size: 1.1 + Math.random() * 1.1, whiten: false, fade: true,
+    });
+  }
+  if (!raf) raf = requestAnimationFrame(frame);
 }
 
 /** 進行中の粒を消す（新しい対局など） */

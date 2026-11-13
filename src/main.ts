@@ -11,7 +11,7 @@ import { celebrate, clearCelebration } from './ui/celebrate';
 import { bindBoardInput } from './ui/input';
 import { clearSaved, loadGame, loadSettings, saveGame, saveSettings, type Controller, type SavedGame } from './ui/storage';
 import { setupTutorial } from './ui/tutorial';
-import { burst, clearParticles } from './ui/particles';
+import { burst, clearParticles, puff } from './ui/particles';
 import { drawChart, moveAtX, voteSeries, type SeriesPoint } from './ui/review';
 import { detectLang, isLang, setLang, t, type Lang } from './ui/i18n';
 import type { ShareResult } from './ui/share';
@@ -137,6 +137,8 @@ function play(m: Move): void {
     const f = burst(renderer.clientPoint(m), () => barTip(party(mover)), party(mover));
     timeArrival(party(mover), f);
     if (f.arriveLast) playSparkle(f.burst, true);   // 粒が飛び散る瞬間の「キラッ」（粒を出さない設定では鳴らさない）
+  } else if (m !== PASS) {
+    puff(renderer.clientPoint(m), party(mover), renderer.cellSize);   // 星でない点：石のまわりに少しだけ散る（票にはならないので飛ばない）
   }
   if (r.captured.length) {
     renderer.captured(r.captured, view.game.toMove);

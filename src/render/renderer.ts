@@ -95,6 +95,9 @@ export class Renderer {
     this.frame(performance.now());
   }
 
+  /** 盤の縦の目の大きさ（CSS px。石の半径はこの 0.46 倍） */
+  get cellSize(): number { return this.cell; }
+
   /** 盤上の点 p の中心の画面座標（票の粒の出どころ・行き先） */
   clientPoint(p: number): { x: number; y: number } {
     const w = this.view?.game.w ?? 1, r = this.canvas.getBoundingClientRect(), cy = this.cell, cx = cy * ASPECT;
