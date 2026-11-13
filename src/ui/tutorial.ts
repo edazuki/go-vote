@@ -36,6 +36,9 @@ const WALLS = both([0, 1, 2, 3, 4].map(y => at(2, y)), [0, 1, 2, 3, 4].map(y => 
 const RED_STARS = [at(0, 0), at(1, 1), at(0, 2), at(1, 3), at(0, 4)];
 /** 赤の陣地の星でない点。(0,1)(0,3) は空けておく */
 const RED_PLAIN = [at(1, 0), at(1, 2), at(1, 4)];
+/** 赤の陣地の内側の空き点を、星 (0,2) と星でない点 (1,0) の2つにした形（大きく囲む盤・開票の盤） */
+const RED_STARS_EYE = [at(0, 0), at(1, 1), at(1, 3), at(0, 4)];
+const RED_PLAIN_EYE = [at(0, 1), at(0, 3), at(1, 2), at(1, 4)];
 /** 青が真ん中の列（x = 3）を埋めて、赤の壁の外側をふさぐ */
 const BLUE_MID = [0, 1, 2, 3, 4].map(y => at(3, y));
 const BLUE_FILL = [at(6, 0), at(5, 1), at(6, 2), at(5, 3), at(6, 4), at(5, 0), at(5, 2), at(5, 4)];
@@ -51,20 +54,22 @@ const STEPS: Step[] = [
   {
     title: 'CAPTURE',
     text: 'tut.1',
-    setup: [at(3, 0), at(3, 1), at(2, 1), PASS, at(4, 1), PASS],
-    demo: [at(3, 2)],
+    // 真ん中：赤が上・左・右から囲んだ青。左下の隅：青が上からふさいだ赤（星の上）。
+    // 赤が下をふさいで青を取り、続けて青が右をふさいで隅の赤を取る（隅は逃げ場が2つしかない）
+    setup: [at(3, 0), at(3, 1), at(2, 1), at(0, 3), at(4, 1), PASS, at(0, 4), PASS],
+    demo: [at(3, 2), at(1, 4)],
   },
   {
     title: 'SURROUND THEM ALL',
     text: 'tut.2',
-    // 赤は内側の空き点を2つ（(0,1)(0,3)）残した形。青は真ん中の列で外側をふさぐ。赤が (0,3) を埋め、青が (0,1) に打って取る
-    setup: [...WALLS, ...both([...RED_STARS, ...RED_PLAIN], BLUE_MID)],
-    demo: [at(0, 3), at(0, 1)],
+    // 赤は内側の空き点を2つ（星 (0,2) と (1,0)）残した形。青は真ん中の列で外側をふさぐ。赤が星 (0,2) を埋め、青が (1,0) に打って取る
+    setup: [...WALLS, ...both([...RED_STARS_EYE, ...RED_PLAIN_EYE], BLUE_MID)],
+    demo: [at(0, 2), at(1, 0)],
   },
   {
     title: 'COUNT THE VOTES',
     text: 'tut.3',
-    setup: [...WALLS, ...both([...RED_STARS, ...RED_PLAIN, at(3, 1), at(3, 3)], BLUE_FILL)],
+    setup: [...WALLS, ...both([...RED_STARS_EYE, ...RED_PLAIN_EYE, at(3, 1), at(3, 3)], BLUE_FILL)],
     demo: [],
   },
   {

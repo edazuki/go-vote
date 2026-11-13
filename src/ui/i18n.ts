@@ -50,10 +50,10 @@ const ja = {
   'resign.tag': '（GIVE UP）',
   'undo.text': 'UNDO を使うと、勝っても「WIN?」になります。ちょっぴり疑惑の当選です。',
   'tut.0': '赤と青の対戦です。盤の線の交点に、交互に石を置きます。白い星のある交点に置くと、その星が置いた色の票になります。星のない交点に置いても票にはなりません。',
-  'tut.1': '相手の石の上下左右をすべて囲むと取れます。取られた石の星は空きに戻り、票がなくなります。',
+  'tut.1': '相手の石を逃げ場なく囲むと取れます。取られた石の星は空きに戻り、票がなくなります。',
   'tut.2': 'つながった石は、いくつあっても、すき間なく囲めばまとめて取れます。内側の空き点もすき間に数えます。ここでは青が最後のすき間に打って、赤の石14個をまとめて取りました。',
-  'tut.3': '二人続けてパスすると終局です。盤に残った星の上の石を数えて、多いほうの勝ち。この盤なら赤 10 − 8 青で赤の勝ちです。',
-  'tut.4': '先に打つほうが有利なので、後手の票には KOMI（コミ）を足します（設定で 0〜10、初期値 0）。それでも同数なら後手の勝ちで、引き分けはありません。得票率でも、同数なら後手が 0.1% 上に表示されます。この盤は 9 − 9 の同数なので、49.9% 対 50.1% で後手の青の勝ちです。',
+  'tut.3': '二人続けてパスすると終局です。票が多い方の勝ちです。終局時に星が残っていることもあります。',
+  'tut.4': '先手が有利なので、後手の票には 0.1% の KOMI が足されます。同数なら後手の勝ちです。KOMI の量は設定で増やすことができます。',
 };
 type Key = keyof typeof ja;
 
@@ -100,10 +100,10 @@ const en: Record<Key, string> = {
   'resign.tag': ' (GAVE UP)',
   'undo.text': 'Use UNDO and your win will show as "WIN?" — a slightly questionable victory.',
   'tut.0': 'Red vs. Blue. Take turns placing stones on the intersections of the lines. A stone on an intersection with a white star makes that star a vote for its color. Stones on other intersections are not votes.',
-  'tut.1': 'Surround an opponent’s stone on all four sides to capture it. The star under a captured stone becomes empty, and the vote is lost.',
+  'tut.1': 'Surround an opponent’s stone so it has no way out to capture it. The star under a captured stone becomes empty, and the vote is lost.',
   'tut.2': 'Connected stones, however many, are captured together once they are surrounded with no gaps. Empty points inside count as gaps too. Here Blue fills the last gap and captures 14 Red stones at once.',
-  'tut.3': 'The game ends when both players pass in a row. Count the stones on star points; most votes wins. On this board, Red wins 10 – 8.',
-  'tut.4': 'Going first is an advantage, so KOMI is added to the second player’s votes (0–10 in Settings, default 0). A tie still goes to the second player, so there are no draws; on a tie the vote share also shows the second player 0.1% ahead. This board is tied 9 – 9, so Blue, playing second, wins 49.9% to 50.1%.',
+  'tut.3': 'The game ends when both players pass in a row. Most votes wins. Some stars may be left empty at the end.',
+  'tut.4': 'Going first is an advantage, so 0.1% KOMI is added to the second player’s votes. A tie goes to the second player. You can increase KOMI in Settings.',
 };
 
 const DICT: Record<Lang, Record<Key, string>> = { ja, en };
