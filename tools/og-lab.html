@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OGP Lab</title>
+  <!-- 開発用：SNS のカード（OGP）画像の案を見比べる（npm run dev で /tools/og-lab.html）。本番のビルドには入らない -->
+  <style>
+    :root { --page: #e7e5df; --ink: #22262f; --muted: #666b78; }
+    @media (prefers-color-scheme: dark) { :root { --page: #0d0f16; --ink: #e6e8ef; --muted: #9298a8; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+    main { max-width: 1300px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { font-size: 19px; margin: 0 0 4px; }
+    .lead { color: var(--muted); margin: 0 0 12px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    button { font: inherit; padding: 4px 10px; border-radius: 8px; border: 1px solid #9aa0ad; background: transparent; color: inherit; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr)); gap: 22px; }
+    figure { margin: 0; }
+    figcaption { margin: 0 0 6px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    figcaption span { color: var(--muted); font-size: 12px; }
+    img { display: block; width: 100%; border-radius: 10px; box-shadow: 0 2px 6px rgba(0, 0, 0, .2), 0 10px 26px rgba(0, 0, 0, .15); }
+    .small img { width: 50%; }
+    #msg { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>OGP Lab：SNS のカード画像</h1>
+    <p class="lead">URL を貼ったときに出るカード（1200×630）の案。盤の局面は tools/og-game.json（HARD 同士の対局から選んだ1局）の終局。なければ NORMAL 同士の接戦の途中です。</p>
+    <div class="toolbar">
+      <button id="again" type="button">局面を変える</button>
+      <label><input id="small" type="checkbox"> タイムラインの大きさ（半分）で見る</label>
+      <span id="msg"></span>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+  <script type="module" src="./og-lab.ts"></script>
+</body>
+</html>

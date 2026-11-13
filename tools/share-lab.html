@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Share Lab</title>
+  <!-- 開発用：結果の共有画像を、いろいろな対局で並べて見比べる（npm run dev で /tools/share-lab.html）。本番のビルドには入らない -->
+  <style>
+    :root { --page: #e7e5df; --ink: #22262f; --muted: #666b78; }
+    @media (prefers-color-scheme: dark) { :root { --page: #0d0f16; --ink: #e6e8ef; --muted: #9298a8; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+    main { max-width: 1500px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { font-size: 19px; margin: 0 0 4px; }
+    .lead { color: var(--muted); margin: 0 0 12px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    .toolbar button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid #9aa0ad; background: transparent; color: inherit; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 18px; }
+    figure { margin: 0; }
+    figcaption { margin: 0 0 6px; }
+    figcaption b { font-size: 14px; }
+    figcaption span { display: block; color: var(--muted); font-size: 12px; }
+    img { display: block; width: 100%; border-radius: 10px; box-shadow: 0 2px 6px rgba(0, 0, 0, .2), 0 10px 26px rgba(0, 0, 0, .15); }
+    .small img { width: 50%; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Share Lab：結果の共有画像</h1>
+    <p class="lead">本番と同じ描き方で、共有画像をデザイン案ごと・対局ごとに並べます。対局は NORMAL 同士で打ったもので、「対局を打ち直す」で別の対局になります。</p>
+    <div class="toolbar">
+      <label>対局 <select id="case"></select></label>
+      <label>デザイン <select id="style"></select></label>
+      <button id="again" type="button">対局を打ち直す</button>
+      <label><input id="small" type="checkbox"> SNS のタイムラインの大きさ（半分）でも見る</label>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+  <script type="module" src="./share-lab.ts"></script>
+</body>
+</html>

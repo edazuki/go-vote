@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f3f1ec" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14182a" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Red vs. Blue on the stars of a flag. A Go-based game: surround, capture, and hold the most stars to win. Play free in your browser.">
+  <!-- SNS のカード（OGP）。画像は public/og.png（tools/og-lab.html で作る）。URL は公開先の絶対 URL -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Go Vote">
+  <meta property="og:description" content="Red vs. Blue on the stars of a flag. A Go-based game: surround, capture, and hold the most stars to win. Play free in your browser.">
+  <meta property="og:url" content="https://edazuki.github.io/go-vote/">
+  <meta property="og:image" content="https://edazuki.github.io/go-vote/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Go Vote: red and blue stones on white stars, with a vote bar">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='5' fill='%231e2c60'/%3E%3Cpath d='M16 6.5l2.6 6.1 6.6.5-5 4.3 1.6 6.4L16 20.3l-5.8 3.5 1.6-6.4-5-4.3 6.6-.5z' fill='%23fff'/%3E%3C/svg%3E">
+  <title>Go Vote</title>
+</head>
+<body>
+  <div id="app">
+    <header id="top">
+      <h1>Go Vote</h1>
+      <span class="spacer"></span>
+      <button id="btn-sound" class="icon" type="button" aria-pressed="false"></button>
+      <button id="btn-settings" class="icon" type="button" aria-label="設定" data-i18n-aria="settings" aria-haspopup="dialog">⚙</button>
+    </header>
+    <section id="setup" aria-label="対局設定" data-i18n-aria="setup">
+      <!-- スマホ：対局中は設定をたたみ、1行の要約だけ出す（押すと開く） -->
+      <button id="setup-toggle" type="button" aria-expanded="true" aria-controls="setup-body">
+        <span id="setup-summary"></span><span class="chev" data-i18n="setup.toggle">設定</span>
+      </button>
+      <div id="setup-body">
+      <div class="fields">
+        <label>BOARD
+          <select id="opt-board">
+            <option value="small5" selected>★13</option>
+            <option value="small7">★13 WIDE</option>
+            <option value="flag">★50</option>
+            <option value="flag-wide">★50 WIDE</option>
+          </select>
+        </label>
+        <label>FIRST
+          <select id="opt-first">
+            <option value="red" selected>RED</option>
+            <option value="blue">BLUE</option>
+            <option value="random">RANDOM</option>
+          </select>
+        </label>
+        <label>RED
+          <select id="opt-red">
+            <option value="human" selected>PLAYER</option>
+            <option value="easy">CPU EASY</option>
+            <option value="normal">CPU NORMAL</option>
+            <option value="hard">CPU HARD</option>
+          </select>
+        </label>
+        <label>BLUE
+          <select id="opt-blue">
+            <option value="human">PLAYER</option>
+            <option value="easy">CPU EASY</option>
+            <option value="normal" selected>CPU NORMAL</option>
+            <option value="hard">CPU HARD</option>
+          </select>
+        </label>
+      </div>
+      <div class="row" id="new-row">
+        <button id="btn-new" type="button" class="primary">NEW GAME</button>
+      </div>
+      </div>
+    </section>
+    <main id="board-col">
+      <!--
+        得票率：紺のバーに、赤は左から・青は右から伸びる。数値・名前・印はバーの上に重ねる。
+        高さは固定（中身が変わっても盤が上下にずれない）。真ん中の線が過半数、中央の札に終局後の勝敗
+      -->
+      <section id="vote-bar" aria-label="得票率">
+        <div class="track">
+          <i id="fill-r" class="fill red"></i>
+          <i id="fill-b" class="fill blue"></i>
+          <i class="mid" aria-hidden="true"></i>
+          <div class="side red" id="vb-r">
+            <b class="pct" id="pct-r">0%</b>
+            <span class="who"><span class="first" id="vb-first-r" hidden>1ST</span><span class="name" id="vb-name-r"></span><span class="badge" id="vb-badge-r"></span></span>
+          </div>
+          <span class="vb-status" id="vb-status" role="status" aria-live="polite"></span>
+          <div class="side blue" id="vb-b">
+            <span class="who"><span class="badge" id="vb-badge-b"></span><span class="name" id="vb-name-b"></span><span class="first" id="vb-first-b" hidden>1ST</span></span>
+            <b class="pct" id="pct-b">0%</b>
+          </div>
+        </div>
+      </section>
+      <div id="board-wrap">
+        <canvas id="board" aria-label="碁盤" data-i18n-aria="board"></canvas>
+      </div>
+      <div id="actions">
+        <!-- 待った：人の手番まで、自分と CPU の手をまとめて戻す。投了：2回押しで確定 -->
+        <button id="btn-undo" type="button" class="sub">UNDO</button>
+        <button id="btn-pass" type="button" class="primary">PASS</button>
+        <button id="btn-resign" type="button" class="sub">GIVE UP</button>
+      </div>
+      <!-- 終局後の振り返り：手を戻して盤を見る。チャートは得票（赤・青）と、未開票（グレー）を半々に分けた形勢（白い線）の推移 -->
+      <section id="review" hidden aria-label="振り返り" data-i18n-aria="review">
+        <canvas id="review-chart" aria-label="得票率と形勢の推移（押した手に戻る）" data-i18n-aria="review.chart"></canvas>
+        <div class="review-nav">
+          <button id="rv-first" type="button" aria-label="最初へ" data-i18n-aria="review.first">«</button>
+          <button id="rv-prev" type="button" aria-label="1手戻る" data-i18n-aria="review.prev">‹</button>
+          <span class="info"><b id="rv-move"></b><span id="rv-lean"></span></span>
+          <button id="rv-next" type="button" aria-label="1手進む" data-i18n-aria="review.next">›</button>
+          <button id="rv-last" type="button" aria-label="最後へ" data-i18n-aria="review.last">»</button>
+        </div>
+        <!-- 結果の共有：共有できる端末は共有シート（文と画像）、できなければ文をコピー。画像は保存もできる -->
+        <div class="review-share">
+          <button id="btn-share" type="button" class="primary">SHARE</button>
+          <button id="btn-image" type="button" class="sub">IMAGE</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="settings" aria-label="設定" data-i18n-aria="settings">
+    <form method="dialog">
+      <h2 data-i18n="settings">設定</h2>
+      <label><span data-i18n="volume">音量</span>
+        <input id="opt-volume" type="range" min="0" max="100" step="5">
+      </label>
+      <label><span data-i18n="komi">KOMI（後手に足す票。次の対局から）</span>
+        <select id="opt-komi"></select>
+      </label>
+      <label><span data-i18n="lang">LANGUAGE / 言語</span>
+        <select id="opt-lang">
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+        </select>
+      </label>
+      <details class="rules" open>
+        <summary data-i18n="rules">ルール</summary>
+        <ul data-i18n-html="rules.list">
+          <li>囲碁（純碁）をもとにしたゲームです。ここに書いていない細かいところは、囲碁（純碁）のルールを調べてみてください</li>
+          <li>赤と青で交互に打ちます。赤・青それぞれを人か CPU が打ち、先手は色と別に決めます（CPU 同士を眺めることもできます）</li>
+          <li>星の交点に置いた石が、その色の票になります</li>
+          <li>相手の石を囲むと取れます。取られた石の星は空きに戻ります</li>
+          <li>自分から取られる形（自殺手）には打てません。石を1個取られた直後に、すぐ1個取り返して元の形に戻すことはできません。一度ほかに打てば取り返せます</li>
+          <li>二人続けてパスで終局。<b>そのとき盤に残っている星の上の石</b>が得票です</li>
+          <li>得票が多いほうの勝ち。後手の票には設定の KOMI（コミ。初期値 0）を足し、それでも同数なら後手の勝ちです（得票率でも、同数なら後手が 0.1% 上に表示されます）</li>
+        </ul>
+      </details>
+      <div class="buttons">
+        <button id="btn-tutorial" type="button" data-i18n="tutorial.open">遊び方を見る</button>
+        <button value="close" class="primary" data-i18n="close">閉じる</button>
+      </div>
+      <button id="btn-reset" class="sub danger" type="button" data-i18n="reset">保存データを消す</button>
+      <p class="about" data-i18n="about">Go Vote v BETA・データはこの端末のブラウザ内にだけ保存されます。架空の選挙をモチーフにした遊びで、実在の政党・候補者とは関係ありません</p>
+    </form>
+  </dialog>
+
+  <!-- 遊び方（最初に開いたときに出す。設定からも見られる） -->
+  <dialog id="tutorial" aria-label="遊び方" data-i18n-aria="tutorial">
+    <div class="tut">
+      <div class="tut-head">
+        <span id="tut-count"></span>
+        <span class="spacer"></span>
+        <button id="tut-sound" class="icon sound" type="button" aria-pressed="false"></button>
+        <button id="tut-skip" type="button" class="sub">SKIP</button>
+      </div>
+      <h2 id="tut-title"></h2>
+      <!-- 本番の得票バーの小型版：赤は左、青は右から伸びる -->
+      <div id="tut-bar" class="mini-bar" aria-hidden="true">
+        <i class="fill red" id="tut-fill-r"></i><i class="fill blue" id="tut-fill-b"></i><i class="mid"></i>
+        <b id="tut-pct-r">0.0%</b><b id="tut-pct-b">0.0%</b>
+      </div>
+      <div id="tut-board"><canvas id="tut-canvas" aria-hidden="true"></canvas></div>
+      <p id="tut-text"></p>
+      <div class="tut-nav">
+        <button id="tut-prev" type="button">BACK</button>
+        <button id="tut-next" type="button" class="primary">NEXT</button>
+      </div>
+    </div>
+  </dialog>
+  <!-- 待ったを初めて使うときの確認（党ごとに1回） -->
+  <dialog id="undo-dlg" aria-labelledby="undo-title">
+    <form method="dialog">
+      <h2 id="undo-title" class="warn">A RECOUNT?</h2>
+      <p class="undo-text" data-i18n="undo.text">UNDO を使うと、勝っても「WIN?」になります。ちょっぴり疑惑の当選です。</p>
+      <div class="buttons">
+        <button value="cancel">CANCEL</button>
+        <button value="undo" class="primary">UNDO</button>
+      </div>
+    </form>
+  </dialog>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

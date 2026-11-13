@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UI Lab</title>
+  <!-- 開発用：盤の外の UI の色味・飾りの案を並べて見比べる（npm run dev で /tools/ui-lab.html）。本番のビルドには入らない -->
+  <style>
+    :root { --page: #e7e5df; --page-ink: #22262f; --page-muted: #666b78; }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #0d0f16; --page-ink: #e6e8ef; --page-muted: #9298a8; } }
+    :root[data-theme="dark"] { --page: #0d0f16; --page-ink: #e6e8ef; --page-muted: #9298a8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--page); color: var(--page-ink); font: 14px/1.5 system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+    main { max-width: 1500px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { font-size: 19px; margin: 0 0 4px; }
+    .lead { color: var(--page-muted); margin: 0 0 12px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .toolbar button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid #9aa0ad; background: transparent; color: inherit; cursor: pointer; }
+    .toolbar button[aria-pressed="true"] { background: var(--page-ink); color: var(--page); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+    figure { margin: 0; }
+    figcaption { margin: 0 0 6px; }
+    figcaption b { font-size: 15px; }
+    figcaption span { display: block; color: var(--page-muted); font-size: 12.5px; }
+
+    /* ---- 画面の見本（スマホ縦）。色は案ごとの変数で ---- */
+    .app {
+      --bg: #f6f3ea; --surface: #fff; --surface-2: #eceff6; --ink: #0e1a3a; --muted: #5b6684; --border: #d3d9e6;
+      --accent: #0a3161; --accent-ink: #fff; --flag-red: #b31942; --stripe-white: #fff; --head-font: inherit;
+      background: var(--bg); color: var(--ink); border-radius: 18px; overflow: hidden; width: 100%; max-width: 380px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, .15), 0 12px 30px rgba(0, 0, 0, .12); font-size: 14px;
+    }
+    .top { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 14px; min-height: 46px; }
+    .top h2 { margin: 0; font-size: 16px; letter-spacing: .06em; font-family: var(--head-font); }
+    .top h2 small { font-size: 10px; font-weight: 400; color: var(--muted); margin-left: .5em; }
+    .top .gear { margin-left: auto; font-size: 18px; opacity: .8; }
+    .setup { margin: 0 8px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px 12px; }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .fields label { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+    .sel { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; min-height: 34px; display: flex; align-items: center; padding: 0 8px; font-size: 13px; color: var(--ink); }
+    .btn { margin-top: 10px; border-radius: 10px; min-height: 40px; display: flex; align-items: center; justify-content: center; font-weight: 700; letter-spacing: .06em; background: var(--accent); color: var(--accent-ink); }
+    .vb { margin: 0 8px 8px; height: 40px; border-radius: 6px; background: #1d2a5c; position: relative; overflow: hidden; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-weight: 800; }
+    .vb i { position: absolute; top: 0; bottom: 0; }
+    .vb .r { left: 0; width: 38%; background: linear-gradient(90deg, #8e0f18, #d42a2a); }
+    .vb .b { right: 0; width: 30%; background: linear-gradient(270deg, #10357f, #3274e6); }
+    .vb .m { left: 50%; width: 2px; margin-left: -1px; background: rgba(255, 255, 255, .55); }
+    .vb span { position: relative; font-size: 17px; }
+    .board { margin: 0 8px; aspect-ratio: 1.15; border-radius: 6px; background: radial-gradient(circle at 50% 40%, #2a3b7a, #17235a); display: grid; place-items: center; box-shadow: 0 2px 4px rgba(10, 15, 40, .3), 0 10px 26px rgba(10, 15, 40, .2); }
+    .board div { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px 14px; color: #fbfaf5; font-size: 15px; }
+    .pass { margin: 10px auto 14px; width: 50%; min-height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; letter-spacing: .1em; background: var(--accent); color: var(--accent-ink); }
+
+    /* 飾り：案ごとに切り替える */
+    .deco-stripe .top { border-bottom: 4px solid var(--flag-red); border-image: repeating-linear-gradient(90deg, var(--flag-red) 0 14px, var(--stripe-white) 14px 28px) 4; margin-bottom: 8px; }
+    .deco-star .top h2::before { content: "★"; color: var(--flag-red); margin-right: .35em; }
+    .deco-capbar .setup { border-top: 4px solid var(--accent); }
+    .deco-btnline .btn, .deco-btnline .pass { box-shadow: inset 0 -3px 0 var(--flag-red); }
+    .deco-boldlabel .fields label { color: var(--label, var(--accent)); font-weight: 700; letter-spacing: .08em; }
+    .deco-band .top { background: var(--flag-red); color: #fff; margin-bottom: 8px; }
+    .deco-band .top h2 small { color: rgba(255, 255, 255, .8); }
+    .deco-band .top h2::before, .deco-navyhead.deco-redbtn .top h2::before { color: #fff; }
+    .deco-navyhead .top { background: var(--accent); color: var(--accent-ink); margin-bottom: 8px; }
+    .deco-navyhead .top h2 small { color: inherit; opacity: .75; }
+    .deco-redbtn .btn, .deco-redbtn .pass { background: var(--flag-red); color: #fff; }
+    .deco-outline .setup { border: 2px solid var(--accent); }
+    .deco-thinlines .top { border-bottom: 2px solid var(--flag-red); box-shadow: 0 2px 0 var(--surface), 0 4px 0 var(--accent); margin-bottom: 10px; }
+    .deco-pill .btn, .deco-pill .pass { border-radius: 999px; }
+    .deco-upper .top h2 { text-transform: uppercase; letter-spacing: .14em; }
+    .deco-stars-bg { background-image: radial-gradient(circle, color-mix(in srgb, var(--accent) 10%, transparent) 1.2px, transparent 1.6px); background-size: 18px 18px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>UI Lab：盤の外の色味と飾り</h1>
+    <p class="lead">盤と得票バーは共通。見出し・設定欄・ボタン・地の色だけを案ごとに変えています。気に入った案の記号（A〜）を伝えてください。</p>
+    <div class="toolbar" role="group" aria-label="明るさ">
+      <button type="button" data-mode="light" aria-pressed="true">ライト</button>
+      <button type="button" data-mode="dark" aria-pressed="false">ダーク</button>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+  <script>
+    // 案：light / dark それぞれの色と、付ける飾り（deco-*）
+    const V = [
+      { name: 'アメリカン', note: '紅白の帯・赤い星・紺の枠上端・ボタン下の赤線',
+        deco: ['stripe', 'star', 'capbar', 'btnline', 'boldlabel'],
+        light: {}, dark: { bg: '#0a1330', surface: '#111e46', 'surface-2': '#182a5c', ink: '#f1f3fa', muted: '#a3aed0', border: '#283b72', accent: '#f1f3fa', 'accent-ink': '#0a1330', 'flag-red': '#e0335a', 'stripe-white': '#e9ecf5' } },
+      { name: '前の色（ベージュと紺）', note: '飾りなし。落ち着いた和紙の地',
+        deco: [],
+        light: { bg: '#f3f1ec', surface: '#fbfaf7', 'surface-2': '#e9e6df', ink: '#1b2036', muted: '#6a6f82', border: '#d9d6cf', accent: '#23336e', 'accent-ink': '#f7f8ff' },
+        dark: { bg: '#14182a', surface: '#1d2236', 'surface-2': '#262c44', ink: '#e8eaf3', muted: '#9aa0b8', border: '#323954', accent: '#8fa8ff', 'accent-ink': '#14182a' } },
+      { name: '選挙ポスター', note: '赤い帯の見出し、白地、大文字で強め',
+        deco: ['band', 'star', 'btnline', 'boldlabel', 'upper'],
+        light: { bg: '#ffffff', surface: '#f5f6fa', border: '#d6dae4', 'flag-red': '#c41e3a', accent: '#0a2a66' },
+        dark: { bg: '#0b1026', surface: '#141b3a', border: '#2a3566', ink: '#f2f4fb', muted: '#a8b0cc', accent: '#f2f4fb', 'accent-ink': '#0b1026', 'flag-red': '#d42a4a' } },
+      { name: 'ネイビー基調', note: '紺の見出し帯、赤いボタン',
+        deco: ['navyhead', 'star', 'redbtn', 'boldlabel'],
+        light: { bg: '#eef1f7', surface: '#ffffff', border: '#cfd6e6', accent: '#0a3161', 'flag-red': '#b31942' },
+        dark: { bg: '#081029', surface: '#0f1a3f', border: '#22346a', ink: '#eef1fa', muted: '#9fabcf', accent: '#16285c', 'accent-ink': '#ffffff', 'flag-red': '#d0284a', label: '#c3cdee' } },
+      { name: 'ビンテージ', note: 'くすんだ赤と紺、セリフの見出し、古紙の地',
+        deco: ['thinlines', 'star', 'outline', 'btnline'],
+        light: { bg: '#efe6d2', surface: '#f8f1e2', 'surface-2': '#e8dcc2', ink: '#2b3148', muted: '#6f6a5c', border: '#d4c6a6', accent: '#2b3a55', 'accent-ink': '#f8f1e2', 'flag-red': '#9e2a2b', 'stripe-white': '#f8f1e2', 'head-font': 'Georgia, "Hiragino Mincho ProN", "Yu Mincho", serif' },
+        dark: { bg: '#1c1a17', surface: '#26231e', border: '#3d382e', ink: '#efe6d2', muted: '#b3a98f', accent: '#d9c9a3', 'accent-ink': '#1c1a17', 'flag-red': '#c0504d', 'head-font': 'Georgia, "Hiragino Mincho ProN", "Yu Mincho", serif' } },
+      { name: '選挙ポスター＋ビンテージの地（いまのゲーム）', note: 'C の見出し・ボタンに、E の古紙の地',
+        deco: ['band', 'star', 'btnline', 'boldlabel', 'upper'],
+        light: { bg: '#efe6d2', surface: '#f8f1e2', 'surface-2': '#e8dcc2', muted: '#6f6a5c', border: '#d4c6a6', 'flag-red': '#c41e3a', accent: '#0a2a66' },
+        dark: { bg: '#1c1a17', surface: '#26231e', 'surface-2': '#322e27', ink: '#f2ede1', muted: '#b3a98f', border: '#3d382e', accent: '#f2f4fb', 'accent-ink': '#0b1026', 'flag-red': '#d42a4a' } },
+      { name: 'ミニマル', note: '白地に細い紅紺の線だけ。丸いボタン',
+        deco: ['thinlines', 'pill'],
+        light: { bg: '#ffffff', surface: '#ffffff', border: '#e1e4ec', accent: '#0a3161', 'flag-red': '#b31942' },
+        dark: { bg: '#0e1220', surface: '#131828', border: '#262d44', ink: '#eceef5', muted: '#99a0b6', accent: '#e9ecf5', 'accent-ink': '#0e1220', 'flag-red': '#e0335a' } },
+      { name: 'アメリカン＋星の地紋', note: 'A の地に、細かな点（星空）を薄く',
+        deco: ['stripe', 'star', 'capbar', 'btnline', 'boldlabel', 'stars-bg'],
+        light: {}, dark: { bg: '#0a1330', surface: '#111e46', 'surface-2': '#182a5c', ink: '#f1f3fa', muted: '#a3aed0', border: '#283b72', accent: '#f1f3fa', 'accent-ink': '#0a1330', 'flag-red': '#e0335a', 'stripe-white': '#e9ecf5' } },
+    ];
+    // 見本の盤：7×5 の市松に星
+    const stars = Array.from({ length: 35 }, (_, i) => ((i % 7) + ((i / 7) | 0)) % 2 === 0 ? '★' : '').map(s => `<span>${s || '&nbsp;'}</span>`).join('');
+    const sample = name => `
+      <div class="top"><h2>Go Vote</h2><span class="gear">⚙</span></div>
+      <div class="setup"><div class="fields">
+        <label>BOARD<span class="sel">★50</span></label><label>FIRST<span class="sel">RANDOM</span></label>
+        <label>RED<span class="sel">PLAYER</span></label><label>BLUE<span class="sel">CPU NORMAL</span></label>
+      </div><div class="btn">NEW GAME</div></div>
+      <div class="vb"><i class="r"></i><i class="b"></i><i class="m"></i><span>38.0%</span><span>30.1%</span></div>
+      <div class="board"><div>${stars}</div></div>
+      <div class="pass">PASS</div>`;
+
+    let mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    function render() {
+      document.documentElement.dataset.theme = mode;
+      for (const b of document.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+      document.getElementById('grid').innerHTML = V.map((v, i) => {
+        const vars = Object.entries(v[mode]).map(([k, val]) => `--${k}:${val}`).join(';');
+        return `<figure><figcaption><b>${String.fromCharCode(65 + i)}. ${v.name}</b><span>${v.note}</span></figcaption>
+          <div class="app ${v.deco.map(d => `deco-${d}`).join(' ')}" style="${vars}">${sample(v.name)}</div></figure>`;
+      }).join('');
+    }
+    for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => { mode = b.dataset.mode; render(); });
+    render();
+  </script>
+</body>
+</html>
