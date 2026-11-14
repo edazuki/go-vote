@@ -107,6 +107,8 @@ function start(d: Omit<SavedGame, 'moves'>, moves: Move[] = []): void {
   thinking = false;
   reviewGame = null;
   series = null;
+  // 同じ盤で線がもう出ているとき（PREVIEW から NEW GAME、対局の途中で NEW GAME）は、線を浮かび直させない
+  const lines = renderer.lines, keepLines = match?.board === d.board && lines.dataset.mode === 'play';
   match = d;
   const spec = BOARDS[d.board];
   stars = starsOf(spec);
@@ -115,11 +117,12 @@ function start(d: Omit<SavedGame, 'moves'>, moves: Move[] = []): void {
   if (d.resigned !== undefined) game.resign(d.resigned);
   view = { game, stars, hover: null, tentative: null, firstRed: firstRed() };
   // 盤の線：消えた状態（旗の星の部分）から、ゆっくり浮かんで盤になる
-  const lines = renderer.lines;
-  lines.dataset.mode = 'intro';
-  void lines.offsetWidth;
-  lines.style.transition = 'opacity 1.6s ease .7s';
-  window.setTimeout(() => { lines.style.transition = ''; }, 2400);
+  if (!keepLines) {
+    lines.dataset.mode = 'intro';
+    void lines.offsetWidth;
+    lines.style.transition = 'opacity 1.6s ease .7s';
+    window.setTimeout(() => { lines.style.transition = ''; }, 2400);
+  }
   update();
   maybeCpu();
 }
