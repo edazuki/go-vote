@@ -1,4 +1,4 @@
-import { isBoardId } from './core/flag';
+import { isBoardId, type BoardId } from './core/flag';
 import { isController, type SavedGame, type SetupChoice } from './ui/storage';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -11,7 +11,9 @@ export function setupPanel(o: {
   initial?: Partial<SetupChoice>;
   /** 選択が変わった（保存用） */
   onChange(choice: SetupChoice): void;
-}): { start(): Omit<SavedGame, 'moves' | 'komi'>; choice(): SetupChoice } {
+  /** 盤を選び直した（盤をすぐ見せるため） */
+  onBoard?(board: BoardId): void;
+}): { start(): Omit<SavedGame, 'moves' | 'komi'>; choice(): SetupChoice; setBoard(board: BoardId): void } {
   const boardSel = $<HTMLSelectElement>('opt-board'), redSel = $<HTMLSelectElement>('opt-red');
   const blueSel = $<HTMLSelectElement>('opt-blue'), firstSel = $<HTMLSelectElement>('opt-first');
 
@@ -23,6 +25,7 @@ export function setupPanel(o: {
   });
 
   for (const el of [boardSel, redSel, blueSel, firstSel]) el.addEventListener('change', () => o.onChange(choice()));
+  boardSel.addEventListener('change', () => o.onBoard?.(choice().board));
 
   // 初期値：前回の選択（古い形の保存は使わず、HTML の初期値のまま）
   const init = o.initial;
@@ -36,6 +39,11 @@ export function setupPanel(o: {
 
   return {
     choice,
+    /** 盤の選択を合わせる（保存した対局を開いたとき）。onBoard は呼ばない */
+    setBoard(board) {
+      boardSel.value = board;
+      o.onChange(choice());
+    },
     /** いまの設定で新しい対局を作る（先手のランダムはここで決める） */
     start() {
       const c = choice();

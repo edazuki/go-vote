@@ -1,7 +1,7 @@
 import './style.css';
 import { AiClient } from './ai/client';
 import { PRETEND_MS, type Level } from './ai/protocol';
-import { BOARDS, KOMI_CHOICES, PARTIES, colorOfParty, partyOf, shownPct, starCount, starsOf, votes, winner, type Party } from './core/flag';
+import { BOARDS, KOMI_CHOICES, type BoardId, PARTIES, colorOfParty, partyOf, shownPct, starCount, starsOf, votes, winner, type Party } from './core/flag';
 import { Game } from './core/game';
 import { BLACK, PASS, opponent, type Color, type Move } from './core/types';
 import { Renderer, type View } from './render/renderer';
@@ -77,6 +77,11 @@ let thinking = false;
 /** 終局後の振り返り：盤に出している手数の局面（最後の局面なら null）と、手ごとの得票率・形勢（終局して初めて作る） */
 let reviewGame: Game | null = null;
 let series: SeriesPoint[] | null = null;
+/**
+ * 盤を選び直して見せている間（プレビュー）の、元の対局。プレビューの盤は空で打てず、NEW GAME で始まる。
+ * 盤を元に戻すと元の対局に戻る。プレビューでないときは null
+ */
+let held: { match: Omit<SavedGame, 'moves'>; game: Game } | null = null;
 /** 盤に出している局面（振り返り中はその手数の局面） */
 const shownGame = () => reviewGame ?? view.game;
 
@@ -113,15 +118,15 @@ function start(d: Omit<SavedGame, 'moves'>, moves: Move[] = []): void {
   const lines = renderer.lines;
   lines.dataset.mode = 'intro';
   void lines.offsetWidth;
-  lines.style.transition = 'opacity 1.6s ease .5s';
-  window.setTimeout(() => { lines.style.transition = ''; }, 2200);
+  lines.style.transition = 'opacity 1.6s ease .7s';
+  window.setTimeout(() => { lines.style.transition = ''; }, 2400);
   update();
   maybeCpu();
 }
 
-const isCpuTurn = () => controller(view.game.toMove) !== 'human' && !view.game.isOver;
+const isCpuTurn = () => !held && controller(view.game.toMove) !== 'human' && !view.game.isOver;
 /** 盤から打てない */
-const locked = () => view.game.isOver || isCpuTurn();
+const locked = () => !!held || view.game.isOver || isCpuTurn();
 
 /**
  * 1手を盤に反映する（音・終局）。盤の上に一瞬出す知らせは使わない。
@@ -205,7 +210,7 @@ function update(): void {
     pct, names: { red: partyName('red'), blue: partyName('blue') }, first: party(BLACK),
     turn: over ? null : party(g.toMove), thinking, passer: !over && g.lastMove === PASS ? party(opponent(g.toMove)) : null,
     over, winner: w,
-    status: w ? `${w.toUpperCase()} WIN${doubted(w) ? '?' : ''}${view.game.resigned !== null ? t('resign.tag') : view.game.repeated ? t('repeat') : ''}` : '',
+    status: held ? 'PREVIEW' : w ? `${w.toUpperCase()} WIN${doubted(w) ? '?' : ''}${view.game.resigned !== null ? t('resign.tag') : view.game.repeated ? t('repeat') : ''}` : '',
     aria: t('votebar.aria', { r: pct.red.toFixed(1), b: pct.blue.toFixed(1) }),
   });
 
@@ -214,9 +219,10 @@ function update(): void {
   passBtn.disabled = locked();
   undoBtn.disabled = over || undoTarget() === null;
   resignBtnEl.disabled = over || resigner() === null;
+  newBtn.classList.toggle('ready', !!held);
   $('actions').hidden = over;
   reviewEl.hidden = !over;
-  view.hideGhost = isCpuTurn();
+  view.hideGhost = isCpuTurn() || !!held;
   // 盤の線の濃さ：ふだんは少し薄め（CSS）。終局で消え、振り返り中も消したまま
   const linesMode = over ? 'over' : 'play';
   if (renderer.lines.dataset.mode !== linesMode) renderer.lines.dataset.mode = linesMode;
@@ -314,7 +320,7 @@ const colorAt = (n: number): Color => (n % 2 === 0 ? BLACK : opponent(BLACK));
  */
 function undoTarget(): number | null {
   const moves = view.game.moves;
-  if (view.game.isOver || !moves.length) return null;
+  if (held || view.game.isOver || !moves.length) return null;
   let n = moves.length - 1;
   while (n > 0 && controller(colorAt(n)) !== 'human') n--;
   for (let i = n; i < moves.length; i++) if (controller(colorAt(i)) === 'human') return n;
@@ -360,7 +366,7 @@ function resigner(): Party | null {
 const resignBtn = confirmButton(resignBtnEl, {
   label: () => 'GIVE UP',
   confirmLabel: () => t('resign.confirm'),
-  enabled: () => resigner() !== null && !view.game.isOver,
+  enabled: () => !held && resigner() !== null && !view.game.isOver,
   onConfirm() {
     const p = resigner();
     if (p === null) return;
@@ -380,9 +386,33 @@ const resignBtn = confirmButton(resignBtnEl, {
 const setup = setupPanel({
   initial: settings.setup,
   onChange(choice) { settings.setup = choice; saveSettings(settings); },
+  onBoard: boardChanged,
 });
 
+/**
+ * 盤を選び直したら、すぐその盤を見せる。元の対局がまだ1手もなければ、その盤で始め直す（先手・PLAYER / CPU は元のまま）。
+ * 1手でもあれば空の盤をプレビューで見せ（打てない・保存しない）、元の盤に戻したら元の対局に戻す
+ */
+function boardChanged(board: BoardId): void {
+  newConfirm.disarm();
+  const real = held ?? { match, game: view.game };
+  if (board === real.match.board) {
+    if (!held) return;
+    held = null;
+    start(real.match, real.game.moves);
+  } else if (!held && !real.game.isOver && !real.game.moves.length) {
+    start({ ...real.match, board });
+    save();
+  } else {
+    held = real;
+    const { firstRed, red, blue, komi } = real.match;
+    start({ board, firstRed, red, blue, komi });
+  }
+  input.clear();
+}
+
 function newMatch(): void {
+  held = null;
   start({ ...setup.start(), komi: settings.komi });
   input.clear();   // 盤（view）ができてから。先に呼ぶと初回起動で view が未定義のまま触ってしまう
   save();
@@ -394,7 +424,8 @@ const NEW_LABEL = newBtn.textContent!;
 const newConfirm = confirmButton(newBtn, {
   label: () => NEW_LABEL,
   confirmLabel: () => t('new.confirm'),
-  needConfirm: () => !view.game.isOver && view.game.moves.length > 0,
+  // プレビュー中は、盤に出ている空の盤でなく元の対局で決める
+  needConfirm: () => { const g = held?.game ?? view.game; return !g.isOver && g.moves.length > 0; },
   onConfirm: newMatch,
 });
 
@@ -448,7 +479,7 @@ if (import.meta.env.DEV) {
   void import('./dev').then(m => m.devPanel({
     board: () => setup.choice().board,
     komi: () => settings.komi,
-    start: (board, moves) => start({ board, firstRed: true, red: 'human', blue: 'human', komi: settings.komi }, moves),
+    start: (board, moves) => { held = null; start({ board, firstRed: true, red: 'human', blue: 'human', komi: settings.komi }, moves); },
     play,
   }));
 }
@@ -460,6 +491,8 @@ window.addEventListener('pointerdown', unlockAudio, { once: true });
 const saved = loadGame();
 if (saved) {
   const { moves, ...d } = saved;
+  // 盤の選択は対局の盤に合わせる（プレビューのまま閉じて開き直したとき、選択だけ別の盤になっている）
+  setup.setBoard(d.board);
   start(d, moves);
   // 打ちかけの対局があれば、設定はたたんで盤から見せる
   setSetupOpen(moves.length === 0);
