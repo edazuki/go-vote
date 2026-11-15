@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { votes } from '../core/flag';
 import { Game } from '../core/game';
 import { PASS } from '../core/types';
 import { FastBoard } from './fastboard';
@@ -164,6 +165,21 @@ describe('勝負がついた終盤', () => {
       for (let s = 1; s <= 3; s++) expect(think(g, s)).toBe(PASS);
     });
   });
+
+  it('hard：今の票数で負けていても、自陣の星が空いていればパスせずに埋めて勝ち切る', () => {
+    // 赤が x=2、青が x=3 に壁。星は赤の陣地の (0,0)(0,2)(0,4) と、青の陣地の (4,0)(4,2)。
+    // 青は自陣の星2つを埋め、赤はまだ埋めていない（赤番、今の票数は 0 対 2）。赤が3つとも埋めれば 3 対 2 で勝つ。
+    // 青は毎回パスするので、赤は「相手がパスした直後」にも判断する（ここで赤もパスすると 0 対 2 で終局して負け）
+    const layout = Array.from({ length: N * N }, (_, i) => [at(0, 0), at(0, 2), at(0, 4), at(4, 0), at(4, 2)].includes(i));
+    const g = Game.fromMoves(N, N, [...walls, PASS, at(4, 0), PASS, at(4, 2)]), rand = seeded(1);
+    for (let i = 0; i < 30 && !g.isOver; i++) {
+      const m = g.toMove === 1 ? searchMove(requestFor(g, layout, 'hard'), { timeMs: 3000, maxPlayouts: 2000 }, rand) : PASS;
+      expect(g.play(m).ok).toBe(true);
+    }
+    expect(g.isOver).toBe(true);
+    const v = votes(g.board, layout);
+    expect([v.black.length, v.white.length]).toEqual([3, 2]);
+  }, 60000);
 });
 
 describe('打ち込み', () => {

@@ -204,12 +204,23 @@ export function searchMove(req: AiRequest, limit: SearchLimit, rand: () => numbe
   }
 
   if (best.move !== PASS) {
-    // 勝ちが決まった局面では、どの手も勝率がほぼ同じになり、無駄な手が選ばれやすい。
-    // パスも十分に試して、パスと大差ないなら打たない
+    // 試行の得点は勝ち負けだけなので、陣地が決まった局面では、自陣の星を埋める手も星でない点を埋める手も勝率が同じになり、
+    // 無駄な手が選ばれやすい。勝ちが決まっていて、パスも十分に試してパスと大差ないなら、パスして下で星を埋める。
+    // そうでなければ（相手がパスした直後で、今の票数ではまだ負けているときなど）、勝率が大きく落ちない無駄でない手に替える
     const p = best.move;
+    if (!idle(p)) return best.move;
     const rule = req.passes > 0 ? PASS_RULE.ends : PASS_RULE.open;
     const passOk = !!pass && pass.visits >= rule.minVisits && rate(pass) >= rate(best) - rule.slack;
-    if (!(rate(best) > 1 - DECIDED && idle(p) && passOk)) return best.move;
+    if (!(rate(best) > 1 - DECIDED && passOk)) {
+      let useful: Node | null = null;
+      for (const ch of root.children) {
+        const q = ch.move;
+        if (q === PASS || idle(q) || ch.visits < 3 || rate(ch) < rate(best) - FILL_SLACK) continue;
+        if (!rootBoard.capturesAt(q, c) && rootBoard.isSelfAtari(q, c)) continue;
+        if (!useful || ch.visits > useful.visits) useful = ch;
+      }
+      return (useful ?? best).move;
+    }
     best = pass!;
   }
   // パスでよい局面。純碁では盤上の石だけが数えられるので、まだ票になる星が空いていれば、勝率がパスと大きく変わらない限り埋める。
