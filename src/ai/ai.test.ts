@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Game } from '../core/game';
 import { PASS } from '../core/types';
+import { FastBoard } from './fastboard';
 import { boardFrom, searchMove } from './mcts';
 import { chooseEasyMove, chooseNormalMove } from './policy';
 import { requestFor, winsByPassing, type Level } from './protocol';
@@ -73,7 +74,7 @@ describe('CPU', () => {
     const stones = Array.from(g.board.cells).filter(v => v !== 0).length;
     // 純碁なので、終局時には盤の大半が石で埋まっている
     expect(stones).toBeGreaterThan(N * N * 0.6);
-  });
+  }, 60000);
 });
 
 describe('星条旗の盤（11×9）', () => {
@@ -137,15 +138,32 @@ describe('勝負がついた終盤', () => {
     it(`${level}：負けている側は、相手の陣地に放り込まずにパスする`, () => {
       const g = Game.fromMoves(N, N, filled);   // 青番
       if (level === 'normal') { expect(think(g)).toBe(PASS); return; }
-      // hard はプレイアウトのぶれで、負けの勝率が「勝負がついた」の線（0.1）をまたぐことがあり、
-      // パスするのは 7 割ほど（コミ 0 でも半目でも同じ）。種を変えて多数がパスすることを見る
+      // hard は試行の得点が勝ち負けだけなので、負けの勝率はほぼ 0 になり、ほぼ必ずパスする（100 回中 97 回）。
+      // まれに試行のぶれで「勝負がついた」の線（0.1）をまたぐので、種を変えて 9 割以上がパスすることを見る
       let passes = 0;
       for (let s = 1; s <= 10; s++) {
         if (searchMove(requestFor(g, stars, level), { timeMs: 3000, maxPlayouts: 2000 }, seeded(s)) === PASS) passes++;
       }
-      expect(passes).toBeGreaterThanOrEqual(6);
+      expect(passes).toBeGreaterThanOrEqual(9);
     });
   }
+
+  describe('hard：負けが決まった側', () => {
+    // 上の青番の局面から、青が自分の陣地の (4,4)、赤が青の陣地の (4,0) に打った局面（青番）。
+    // 赤 (4,0) はアタリで取れるが、星は3つとも赤なので、取っても青は 0 対 3 で負け（赤の陣地は狭く、打ち込んでも取られるだけ）
+    const lost = [...filled, at(4, 4), at(4, 0)];
+    const think = (g: Game, s: number) => searchMove(requestFor(g, stars, 'hard'), { timeMs: 3000, maxPlayouts: 2000 }, seeded(s));
+
+    it('相手がまだパスしていなければ、パスせずに足掻く', () => {
+      const g = Game.fromMoves(N, N, lost);
+      for (let s = 1; s <= 3; s++) expect(think(g, s)).not.toBe(PASS);
+    });
+
+    it('相手がパスした直後は、パスして負けを受け入れる', () => {
+      const g = Game.fromMoves(N, N, [...lost, at(4, 2), PASS]);   // 青 (4,2) に赤はパス → 青番
+      for (let s = 1; s <= 3; s++) expect(think(g, s)).toBe(PASS);
+    });
+  });
 });
 
 describe('打ち込み', () => {
@@ -160,4 +178,53 @@ describe('打ち込み', () => {
     expect(m).not.toBe(PASS);
     expect(m % M).toBeGreaterThanOrEqual(3);
   });
+});
+
+describe('シチョウ', () => {
+  /** w×h の盤に黒 X・白 O を置き、手番を決める */
+  function board(w: number, h: number, black: [number, number][], white: [number, number][], toMove: 1 | 2): FastBoard {
+    const b = new FastBoard(w, h);
+    for (const [x, y] of black) b.cells[y * w + x] = 1;
+    for (const [x, y] of white) b.cells[y * w + x] = 2;
+    b.toMove = toMove;
+    return b;
+  }
+  // ★50（11×9）。白 (2,2) を黒 (2,1)(1,2)(1,3)(3,2) が囲みアタリ。逃げると右下へ階段に追われる
+  const B0: [number, number][] = [[2, 1], [1, 2], [1, 3], [3, 2]];
+  const W0: [number, number][] = [[2, 2], [9, 1], [9, 3], [1, 7]];
+  const p = (x: number, y: number) => y * 11 + x;
+
+  it('あたりがなければ取られ、逃げ道の先に白があれば逃げ切れる', () => {
+    expect(board(11, 9, B0, W0, 2).ladderCaptured(p(2, 2))).toBe(true);
+    expect(board(11, 9, B0, [...W0, [7, 6]], 2).ladderCaptured(p(2, 2))).toBe(false);
+  });
+
+  it('取られるシチョウを逃げる手か', () => {
+    expect(board(11, 9, B0, W0, 2).ladderEscapeFails(p(2, 3), 2)).toBe(true);
+    expect(board(11, 9, B0, [...W0, [7, 6]], 2).ladderEscapeFails(p(2, 3), 2)).toBe(false);
+    // アタリでない点・アタリでない連の隣は逃げる手ではない
+    expect(board(11, 9, B0, W0, 2).ladderEscapeFails(p(5, 5), 2)).toBe(false);
+    expect(board(11, 9, B0, W0, 2).ladderEscapeFails(p(9, 2), 2)).toBe(false);
+  });
+
+  it('囲んでいるアタリの石を取って逃げられる', () => {
+    // 7×7。白 (3,3) は (3,4) が最後の呼吸点。伸びると自分からアタリだが、黒 (4,3) もアタリで (4,4) で取れる
+    const black: [number, number][] = [[2, 3], [3, 2], [4, 3], [2, 4], [3, 5]];
+    expect(board(7, 7, black, [[3, 3], [5, 3], [4, 2]], 2).ladderCaptured(3 * 7 + 3)).toBe(false);
+    expect(board(7, 7, black, [[3, 3]], 2).ladderCaptured(3 * 7 + 3)).toBe(true);
+  });
+
+  it('呼吸点が2つ以上ある連は取られない', () => {
+    expect(board(7, 7, [[2, 3]], [[3, 3]], 2).ladderCaptured(3 * 7 + 3)).toBe(false);
+  });
+
+  it('HARD は、4子まで追われた取られるシチョウを逃げない', () => {
+    const W = 11, H = 9, stars = Array.from({ length: W * H }, (_, i) => (i % W + ((i / W) | 0)) % 2 === 0);
+    // 上の形を手順で作り、3段追う：白 (2,2)(2,3)(3,3)(3,4) の最後の呼吸点は (4,4)。
+    // ランダムな試行はシチョウをたどらないので、シチョウ読みなしでは (4,4) に逃げ続ける
+    const start = [p(2, 1), p(2, 2), p(1, 2), p(9, 1), p(1, 3), p(9, 3), PASS, p(1, 7), p(3, 2)];
+    const steps = [p(2, 3), p(2, 4), p(3, 3), p(4, 3), p(3, 4), p(3, 5)];
+    const g = Game.fromMoves(W, H, [...start, ...steps]);
+    for (let s = 1; s <= 3; s++) expect(searchMove(requestFor(g, stars, 'hard'), { timeMs: 10000, maxPlayouts: 2000 }, seeded(s))).not.toBe(p(4, 4));
+  }, 60000);
 });

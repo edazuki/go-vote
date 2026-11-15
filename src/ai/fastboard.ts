@@ -4,6 +4,16 @@ import { BLACK, EMPTY, PASS, WHITE, opponent, type Color, type Move } from '../c
 /** プレイアウトの1手で、取れる手・星の点を探して拾う点の数 */
 const PROBES = 8;
 
+/** シチョウ読みの上限：追う手順の深さ（逃げる側の手の数）と、読む局面の数。超えたら「読み切れない」 */
+const LADDER_DEPTH = 40, LADDER_NODES = 400;
+/** シチョウ読みの結果 */
+const CAPTURED = 1, ESCAPES = 0, UNKNOWN = -1;
+
+/** シチョウ読みの作業盤（盤の大きさごと。深さごとに2枚） */
+const ladderPools = new Map<string, FastBoard[]>();
+/** いまのシチョウ読みで読んだ局面の数 */
+let ladderNodes = 0;
+
 /**
  * 探索用の書き換え可能な盤面（純碁用）。Game と同じ着手規則（自殺手禁止・即時取り返しのコウ禁止）を、
  * 作業領域を使い回してメモリ確保なしで処理する。繰り返しの判定はしない（ルート側で Game が済ませる）
@@ -17,8 +27,6 @@ export class FastBoard {
   /** 手番側が打てないコウの点（なければ -1） */
   ko = -1;
   passes = 0;
-  /** 直前の着手点（パス・なしは -1） */
-  last = -1;
   private readonly mark: Uint32Array;
   private readonly libMark: Uint32Array;
   private readonly stack: Int16Array;
@@ -40,7 +48,6 @@ export class FastBoard {
     this.toMove = o.toMove;
     this.ko = o.ko;
     this.passes = o.passes;
-    this.last = o.last;
   }
 
   /** p を含む連の呼吸点を limit 個まで数える（skip の点は呼吸点に数えない） */
@@ -214,7 +221,7 @@ export class FastBoard {
   play(m: Move): void {
     const c = this.toMove, e = opponent(c);
     this.toMove = e;
-    if (m === PASS) { this.passes++; this.ko = -1; this.last = -1; return; }
+    if (m === PASS) { this.passes++; this.ko = -1; return; }
     const { cells, nbr } = this;
     cells[m] = c;
     let captured = 0, at = -1, single = true;
@@ -227,7 +234,6 @@ export class FastBoard {
     // Game.play と同じ：1子を取り、打った石が1子のまま呼吸点1つならコウ
     this.ko = captured === 1 && single && this.libs(m, 2, -1) === 1 ? at : -1;
     this.passes = 0;
-    this.last = m;
   }
 
   /** p を含む連の呼吸点が1つだけなら、その点（それ以外は -1） */
@@ -238,35 +244,11 @@ export class FastBoard {
     return -1;
   }
 
-  /** 直前の手のまわりで、アタリの相手を取る／アタリの自分を逃がす手（なければ -1） */
-  private urgentMove(): number {
-    const m = this.last;
-    if (m < 0) return -1;
-    const c = this.toMove;
-    // 直前に打たれた石がアタリなら取る
-    let lib = this.atariAt(m);
-    if (lib >= 0 && this.isLegal(lib, c)) return lib;
-    for (let d = 0; d < 4; d++) {
-      const q = this.nbr[m * 4 + d];
-      if (q < 0 || this.cells[q] !== c) continue;
-      lib = this.atariAt(q);
-      if (lib < 0 || !this.isLegal(lib, c)) continue;
-      // 逃げた先で呼吸点が2つ以上になりそうなら逃げる（空点の隣が2つ以上か、取れる）
-      let empties = 0;
-      for (let k = 0; k < 4; k++) { const r = this.nbr[lib * 4 + k]; if (r >= 0 && this.cells[r] === EMPTY) empties++; }
-      if (empties >= 2 || this.capturesAt(lib, c)) return lib;
-    }
-    return -1;
-  }
-
   /**
-   * プレイアウトの1手：急ぎの手があればそれ、なければランダムに候補手を選ぶ。
-   * 何点か拾って、取れる手があればそれ、なければ重い（星の）点を優先する。
+   * プレイアウトの1手：ランダムに候補手を選ぶ。何点か拾って、取れる手があればそれ、なければ重い（星の）点を優先する。
    * 自分からアタリになる手は後回し（ほかに手がなければ打つ。打たずにパスすると、取られるはずの石が盤上に残ってしまう）
    */
   randomMove(rand: () => number, weights?: ArrayLike<number>): Move {
-    const u = this.urgentMove();
-    if (u >= 0 && this.isCandidate(u)) return u;
     const n = this.cells.length, c = this.toMove;
     let best = -1, bestW = 0;
     for (let i = 0; i < PROBES; i++) {
@@ -287,6 +269,100 @@ export class FastBoard {
       return p;
     }
     return fallback;
+  }
+
+  /** シチョウ読みの作業盤 i 枚目（この盤の写し） */
+  private work(i: number): FastBoard {
+    const key = `${this.w}x${this.h}`;
+    let pool = ladderPools.get(key);
+    if (!pool) ladderPools.set(key, pool = []);
+    const t = pool[i] ??= new FastBoard(this.w, this.h);
+    t.copyFrom(this);
+    return t;
+  }
+
+  /** p を含む連の呼吸点を out に入れて、その数を返す（limit で打ち切り） */
+  private libsInto(p: number, limit: number, out: number[]): number {
+    const n = this.libs(p, limit, -1), s = this.stamp;
+    out.length = 0;
+    for (let q = 0; q < this.cells.length && out.length < n; q++) if (this.cells[q] === EMPTY && this.libMark[q] === s) out.push(q);
+    return n;
+  }
+
+  /**
+   * シチョウ読み：p の連（呼吸点1つ）の色が逃げる番として、逃げてもシチョウで取られるか。
+   * 逃げる側は最後の呼吸点に伸びる手と、まわりのアタリの相手を取る手だけ、追う側は呼吸点2つのどちらかでアタリにする手だけを読む。
+   * 伸びて呼吸点3つ以上なら逃げ切り。深さ・局面の数の上限を超えたら UNKNOWN
+   */
+  private ladderRead(p: number, depth: number): number {
+    if (depth > LADDER_DEPTH || ++ladderNodes > LADDER_NODES) return UNKNOWN;
+    const d = this.cells[p] as Color, e = opponent(d), lib = this.atariAt(p);
+    if (lib < 0) return ESCAPES;
+    // 逃げる手：伸びる、まわりのアタリの相手を取る（連の石は atariAt の libs で mark に印が付いている）
+    const s = this.stamp, tries = [lib];
+    for (let q = 0; q < this.cells.length; q++) {
+      if (this.cells[q] !== d || this.mark[q] !== s) continue;
+      for (let k = 0; k < 4; k++) {
+        const r = this.nbr[q * 4 + k];
+        if (r >= 0 && this.cells[r] === e) { const l = this.atariAt(r); if (l >= 0 && !tries.includes(l)) tries.push(l); }
+      }
+    }
+    let unknown = false;
+    const libs: number[] = [];
+    for (const m of tries) {
+      if (!this.isLegalFor(m, d)) continue;
+      const c1 = this.work(depth * 2);
+      c1.toMove = d;
+      c1.play(m);
+      const n = c1.libsInto(p, 3, libs);
+      if (n >= 3) return ESCAPES;
+      if (n <= 1) continue;
+      // 呼吸点2つ：追う側がどちらかでアタリにして、逃げられなければ取られる
+      let caught = false;
+      for (const a of libs) {
+        if (!c1.isLegalFor(a, e)) continue;
+        const c2 = c1.work(depth * 2 + 1);
+        c2.toMove = e;
+        c2.play(a);
+        if (c2.groupLibs(p, 2) !== 1) continue;
+        const r = c2.ladderRead(p, depth + 1);
+        if (r === CAPTURED) { caught = true; break; }
+        if (r === UNKNOWN) unknown = true;
+      }
+      if (!caught) return unknown ? UNKNOWN : ESCAPES;
+    }
+    return CAPTURED;
+  }
+
+  /** c が手番のときと同じ合法判定を、手番によらず c について行う */
+  private isLegalFor(p: number, c: Color): boolean {
+    const t = this.toMove;
+    this.toMove = c;
+    const ok = this.isLegal(p, c);
+    this.toMove = t;
+    return ok;
+  }
+
+  /** p の連（呼吸点1つ）が、逃げてもシチョウで取られるか（読み切れないときは取られないとみなす） */
+  ladderCaptured(p: number): boolean {
+    ladderNodes = 0;
+    return this.ladderRead(p, 0) === CAPTURED;
+  }
+
+  /**
+   * c が p に打つのが、取られるシチョウを逃げる手か：p がアタリの自分の連の最後の呼吸点で、
+   * 相手の石を取らず、そのどの連も逃げてもシチョウで取られる
+   */
+  ladderEscapeFails(p: number, c: Color): boolean {
+    if (this.capturesAt(p, c)) return false;
+    let inAtari = false;
+    for (let d = 0; d < 4; d++) {
+      const q = this.nbr[p * 4 + d];
+      if (q < 0 || this.cells[q] !== c || this.atariAt(q) !== p) continue;
+      inAtari = true;
+      if (!this.ladderCaptured(q)) return false;
+    }
+    return inAtari;
   }
 
   /** 黒から見た差：盤上の石の重みの合計（黒 − 白）。純碁の数え方に、交点ごとの重みを掛けたもの */
