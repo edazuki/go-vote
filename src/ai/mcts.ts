@@ -78,6 +78,8 @@ export interface SearchLimit {
   plain?: boolean;
   /** シチョウ読みを使わない（検証用） */
   noLadder?: boolean;
+  /** 読み終えたときに、いちばん読んだ手の見込みの勝率（手番の側から）と読んだ回数を受け取る（検証の記録用） */
+  report?: (r: { rate: number; visits: number }) => void;
 }
 
 /** 依頼の局面を FastBoard に写す */
@@ -173,6 +175,7 @@ export function searchMove(req: AiRequest, limit: SearchLimit, rand: () => numbe
 
   let best = root.children[0];
   for (const ch of root.children) if (ch.visits > best.visits) best = ch;
+  limit.report?.({ rate: best.wins / best.visits, visits: best.visits });
   if (limit.plain) return best.move;
   const c = req.toMove, e = opponent(c), rate = (ch: Node) => ch.wins / ch.visits;
   const pass = root.children.find(ch => ch.move === PASS);
@@ -206,12 +209,13 @@ export function searchMove(req: AiRequest, limit: SearchLimit, rand: () => numbe
   if (best.move !== PASS) {
     // 試行の得点は勝ち負けだけなので、陣地が決まった局面では、自陣の星を埋める手も星でない点を埋める手も勝率が同じになり、
     // 無駄な手が選ばれやすい。勝ちが決まっていて、パスも十分に試してパスと大差ないなら、パスして下で星を埋める。
-    // そうでなければ（相手がパスした直後で、今の票数ではまだ負けているときなど）、勝率が大きく落ちない無駄でない手に替える
+    // そうでなければ（相手がパスした直後で、今の票数ではまだ負けているときなど）、勝率が大きく落ちない無駄でない手に替える。
+    // 接戦では替えない：相手の狭い陣地への手でも、ナカデの急所のように勝ち負けを決める手がある（広い盤では勝率の差が小さく、替えると取りこぼす）
     const p = best.move;
-    if (!idle(p)) return best.move;
+    if (!idle(p) || rate(best) <= 1 - DECIDED) return best.move;
     const rule = req.passes > 0 ? PASS_RULE.ends : PASS_RULE.open;
     const passOk = !!pass && pass.visits >= rule.minVisits && rate(pass) >= rate(best) - rule.slack;
-    if (!(rate(best) > 1 - DECIDED && passOk)) {
+    if (!passOk) {
       let useful: Node | null = null;
       for (const ch of root.children) {
         const q = ch.move;

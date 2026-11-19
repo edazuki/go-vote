@@ -7,23 +7,15 @@
  * 局面：赤が x=0..5、青が x=6..10 を埋めた ★50（赤番）。赤の陣地には、星1つと星でない点が混ざった 2〜3 目の空きが5つ
  * （青が入っても二眼を作れない）。青の陣地には星でない点の眼が2つ。今の票数は 22 対 23 で、赤は星を2つ埋めれば 24 対 23 で勝つ。
  * 青は毎回パスし、赤は worker.ts と同じく、パスして勝てるなら読まずにパスする。
- * いちばん短い手順は「星・星・パス」の3手。種ごとに赤の手を出し（* が星）、最後に最短だった数と、星でない点を打った数をまとめる
+ * いちばん短い手順は「星・星・パス」の3手。種ごとに赤の手を出し（* が星）、最後に最短だった数と、星でない点を打った数をまとめる。
+ * 棋譜は打ち手と一緒に records/ に残す（scripts/record.ts）
  */
 import { BOARDS, starsOf, votes } from '../src/core/flag';
 import { Game } from '../src/core/game';
 import { PASS } from '../src/core/types';
 import { searchMove } from '../src/ai/mcts';
 import { requestFor, winsByPassing } from '../src/ai/protocol';
-
-/** 再現できる乱数（mulberry32。src/ai/ai.test.ts と同じ） */
-function seeded(seed: number): () => number {
-  return () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+import { moveSeed, openRecord, REPO, seeded } from './record';
 
 const seeds = Number(process.argv[2] ?? 8), playouts = Number(process.argv[3] ?? 5000);
 const spec = BOARDS.flag, W = spec.w, H = spec.h, stars = starsOf(spec), at = (x: number, y: number) => y * W + x;
@@ -39,13 +31,14 @@ for (let y = 0; y < H; y++) {
 }
 const setup = Array.from({ length: Math.max(red.length, blue.length) }, (_, i) => [red[i] ?? PASS, blue[i] ?? PASS]).flat();
 
+const record = openRecord('endgame-check', { red: { dir: REPO, level: 'hard', playouts }, blue: { dir: REPO, level: 'pass' } });
 let shortest = 0, plain = 0;
 for (let s = 1; s <= seeds; s++) {
-  const g = Game.fromMoves(W, H, setup), rand = seeded(s), played: number[] = [];
+  const g = Game.fromMoves(W, H, setup), played: number[] = [];
   for (let i = 0; i < 40 && !g.isOver; i++) {
     if (g.toMove === 2) { g.play(PASS); continue; }
     const req = requestFor(g, stars, 'hard');
-    const m = winsByPassing(req) ? PASS : searchMove(req, { timeMs: 1e9, maxPlayouts: playouts }, rand);
+    const m = winsByPassing(req) ? PASS : searchMove(req, { timeMs: 1e9, maxPlayouts: playouts }, seeded(moveSeed(s, g.moves.length - setup.length)));
     played.push(m);
     g.play(m);
   }
@@ -53,5 +46,9 @@ for (let s = 1; s <= seeds; s++) {
   if (played.length === 3 && stars[played[0]] && stars[played[1]] && played[2] === PASS) shortest++;
   plain += wasted;
   console.log(`seed ${s}: ${played.map(show).join(' ')}  → ${v.black.length} 対 ${v.white.length}`);
+  record.game({
+    board: 'flag', w: W, h: H, komi: requestFor(g, stars, 'hard').komi ?? 0, black: 'red', white: 'blue', seeds: { black: s }, setup, moves: g.moves.slice(setup.length),
+    votes: `${v.black.length}-${v.white.length}`, winner: v.black.length > v.white.length ? 'black' : 'white',
+  });
 }
 console.log(`最短（星・星・パス）: ${shortest}/${seeds}　星でない点を打った数: ${plain}`);
